@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use std::vec;
 use std::{
     error::Error,
     sync::mpsc::{self},
@@ -7,6 +8,7 @@ use std::{
     {io, thread},
 };
 
+use invaders::invaders::Invaders;
 use rusty_audio::Audio;
 use crossterm::terminal::LeaveAlternateScreen;
 use crossterm::cursor::Hide;
@@ -26,7 +28,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     audio.add("startup", "audio/startup.wav");
     audio.add("win", "audio/win.wav");
 
-    audio.play("startup");
     // Terminal
 
     let mut stdout = io::stdout();
@@ -59,6 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut player = Player::new();
     let mut instant = Instant::now();
+    let mut invaders = Invaders::new();
 
 
     'gameloop: loop {
@@ -78,11 +80,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                     KeyCode::Left => {
                         player.move_left();
-                        audio.play("move");
                     }
                     KeyCode::Right => {
                         player.move_right();
-                        audio.play("move");
                     }
                     KeyCode::Char(' ') | KeyCode::Enter => {
                         if player.shot() {
@@ -97,11 +97,32 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Updates
 
         player.update(delta);
+        if invaders.update(delta) {
+            audio.play("move");
+        }
+        if player.detect_hits(&mut invaders) {
+            audio.play("explode");
+        }
 
         // Draw and render
-        player.draw(&mut curr_frame);
+        let drawables: Vec<&dyn Drawable> =  vec![&player, &invaders];
+        for drawable in drawables {
+            drawable.draw(&mut curr_frame);
+        }
+
         let _ = render_tx.send(curr_frame);
         thread::sleep(Duration::from_millis(1));
+
+
+        // Win or lose ?
+        if invaders.all_killed() {
+            audio.play("win");
+            break 'gameloop;
+        }else if invaders.reached_bottom() {
+            audio.play("lose");
+            break 'gameloop;
+        }
+
 
     }
 
